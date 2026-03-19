@@ -14,9 +14,9 @@ long baseAddr(char *soname)  // credits to https://github.com/ikoz/AndroidSubstr
 {
     void *imagehandle = dlopen(soname, RTLD_LOCAL | RTLD_LAZY);
     if (soname == NULL)
-        return NULL;
+        return 0;
     if (imagehandle == NULL){
-        return NULL;
+        return 0;
     }
     uintptr_t * irc = NULL;
     FILE *f = NULL;
@@ -25,7 +25,7 @@ long baseAddr(char *soname)  // credits to https://github.com/ikoz/AndroidSubstr
     char *tok = NULL;
     char * baseAddr = NULL;
     if ((f = fopen("/proc/self/maps", "r")) == NULL)
-        return NULL;
+        return 0;
     while (fgets(line, 199, f) != NULL)
     {
         tok = strtok_r(line, "-", &state);
@@ -57,7 +57,7 @@ long baseAddr(char *soname)  // credits to https://github.com/ikoz/AndroidSubstr
         }
     }
     fclose(f);
-    return NULL;
+    return 0;
 }
 
 long location; // save lib.so base address so we do not have to recalculate every time causing lag.
@@ -67,7 +67,7 @@ long getRealOffset(long offset) // calculate dump.cs address + lib.so base addre
     if (location == 0)
     {
         //arm
-        location = baseAddr("/data/app/com.beatgames.beatsaber-1/lib/arm/libil2cpp.so"); // replace the com.package.name with the package name of the app you are modding.
+        location = baseAddr("/data/app/com.AoQ.AttackOnQuest-1/lib/arm/libil2cpp.so"); // replace the com.package.name with the package name of the app you are modding.
     }
     return location + offset;
 }

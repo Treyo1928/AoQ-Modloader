@@ -62,7 +62,7 @@ MAKE_HOOK(get_color, 0x12DC59C, Color, void* self)
 
 __attribute__((constructor)) void lib_main()
 {
-    FILE* config = fopen("/sdcard/Android/data/com.beatgames.beatsaber/files/mods/customcolors.cfg", "r");
+    FILE* config = fopen("/sdcard/Android/data/com.AoQ.AttackOnQuest/files/mods/customcolors.cfg", "r");
     fscanf(config, "%f %f %f %f %f %f", &left_r, &left_g, &left_b, &right_r, &right_g, &right_b);
     fclose(config);
 

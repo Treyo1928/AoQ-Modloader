@@ -14,8 +14,8 @@
 #include "../shared/inline-hook/inlineHook.h"
 #include "../shared/utils/utils.h"
 
-#define MOD_PATH "/sdcard/Android/data/com.beatgames.beatsaber/files/mods/"
-#define MOD_TEMP_PATH "/data/data/com.beatgames.beatsaber/cache/curmod.so"
+#define MOD_PATH "/sdcard/Android/data/com.AoQ.AttackOnQuest/files/mods/"
+#define MOD_TEMP_PATH "/data/data/com.AoQ.AttackOnQuest/cache/curmod.so"
 
 void load_mods()
 {
@@ -45,7 +45,7 @@ void load_mods()
             unlink(MOD_TEMP_PATH);
 
             // Creates temporary copy (we can't execute stuff in /sdcard so we need to copy it over)
-            int outfile = open(MOD_TEMP_PATH, O_CREAT | O_WRONLY);
+            int outfile = open(MOD_TEMP_PATH, O_CREAT | O_WRONLY, 0644);
             sendfile(outfile, infile, 0, filesize);
             close(infile);
             close(outfile);

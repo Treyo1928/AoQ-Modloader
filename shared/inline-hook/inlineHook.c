@@ -1,3 +1,10 @@
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/syscall.h>
+int cacheflush(long start, long end, long flags);
+#ifndef gettid
+#define gettid() syscall(__NR_gettid)
+#endif
 /*
 thumb16 thumb32 arm32 inlineHook
 author: ele7enxxh
