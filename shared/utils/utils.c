@@ -67,7 +67,14 @@ long getRealOffset(long offset) // calculate dump.cs address + lib.so base addre
     if (location == 0)
     {
         //arm
-        location = baseAddr("/data/app/com.AoQ.AttackOnQuest-1/lib/arm/libil2cpp.so"); // replace the com.package.name with the package name of the app you are modding.
+        /* Use just the library filename so the suffix match in baseAddr()
+         * works regardless of Android version's install path format.
+         * Android 12+ uses randomised paths like:
+         *   /data/app/~~xyz==/com.AoQ.AttackOnQuest-1/lib/arm/libil2cpp.so
+         * whereas older versions use:
+         *   /data/app/com.AoQ.AttackOnQuest-1/lib/arm/libil2cpp.so
+         * Both end with "libil2cpp.so", so the suffix match catches either. */
+        location = baseAddr("libil2cpp.so");
     }
     return location + offset;
 }
