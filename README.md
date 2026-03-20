@@ -16,7 +16,7 @@ A static constructor (`<clinit>`) is injected into the game's compiled Smali byt
 
 If you just want to play with mods and don't need to build anything yourself, download the pre-patched APK from the [Releases](https://github.com/Treyo1928/AoQ-Modloader/releases) page and sideload it via SideQuest or `adb`:
 ```bash
-adb install -r AoQ_Modded_Aligned.apk
+adb install -r AoQ_Patched.apk
 ```
 
 Then skip to [Step 4](#step-4--install-a-mod) to start loading mods.
