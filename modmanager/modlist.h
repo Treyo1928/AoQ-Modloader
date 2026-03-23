@@ -6,7 +6,7 @@ extern "C" {
 #endif
 
 /* Filesystem locations on device */
-#define MODS_BASE_DIR     "/sdcard/Android/data/com.AoQ.AttackOnQuest/files"
+#define MODS_BASE_DIR     "/sdcard/DCIM/AoQMods"
 #define MODS_DIR          MODS_BASE_DIR "/mods/"
 #define MODS_DISABLED_DIR MODS_DIR "disabledmods/"
 

@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <errno.h>
 #include <linux/limits.h>
 #include <sys/sendfile.h>
 #include <sys/stat.h>
@@ -14,7 +15,7 @@
 #include "../shared/inline-hook/inlineHook.h"
 #include "../shared/utils/utils.h"
 
-#define FILES_DIR     "/sdcard/Android/data/com.AoQ.AttackOnQuest/files"
+#define FILES_DIR     "/sdcard/DCIM/AoQMods"
 #define MOD_PATH      FILES_DIR "/mods/"
 #define MOD_TEMP_PATH "/data/data/com.AoQ.AttackOnQuest/cache/curmod.so"
 
@@ -35,6 +36,8 @@ void load_mods()
 
     struct dirent **file_list;
     int no_files = scandir(MOD_PATH, &file_list, NULL, alphasort);
+    __android_log_print(ANDROID_LOG_INFO, "QuestHook", "scandir(%s) = %d  errno=%d (%s)",
+                        MOD_PATH, no_files, errno, strerror(errno));
 
     // Goes through all files in the mods folder alphabetically
     for (int i = 0; i < no_files; i++)

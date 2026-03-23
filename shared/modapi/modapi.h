@@ -31,7 +31,7 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#define AOQMM_FILES_DIR "/sdcard/Android/data/com.AoQ.AttackOnQuest/files/"
+#define AOQMM_FILES_DIR "/sdcard/DCIM/AoQMods/"
 #define AOQMM_CFG_DIR   AOQMM_FILES_DIR "modconfigs/"
 
 /* Internal: convert "libfoo.so" -> "foo" */
