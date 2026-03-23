@@ -14,13 +14,24 @@
 #include "../shared/inline-hook/inlineHook.h"
 #include "../shared/utils/utils.h"
 
-#define MOD_PATH "/sdcard/Android/data/com.AoQ.AttackOnQuest/files/mods/"
+#define FILES_DIR     "/sdcard/Android/data/com.AoQ.AttackOnQuest/files"
+#define MOD_PATH      FILES_DIR "/mods/"
 #define MOD_TEMP_PATH "/data/data/com.AoQ.AttackOnQuest/cache/curmod.so"
+
+static void setup_directories(void)
+{
+    /* Create all on-device directories the framework needs.
+     * mkdir is a no-op if the directory already exists. */
+    mkdir(FILES_DIR,                        0755);
+    mkdir(FILES_DIR "/mods",                0755);
+    mkdir(FILES_DIR "/mods/disabledmods",   0755);
+    mkdir(FILES_DIR "/modconfigs",          0755);
+    __android_log_write(ANDROID_LOG_INFO, "QuestHook", "Directories ready.");
+}
 
 void load_mods()
 {
     __android_log_write(ANDROID_LOG_INFO, "QuestHook", "Loading mods!");
-    mkdir(MOD_PATH, 0);
 
     struct dirent **file_list;
     int no_files = scandir(MOD_PATH, &file_list, NULL, alphasort);
@@ -68,6 +79,7 @@ void modmanager_init(void);
 __attribute__((constructor)) void lib_main()
 {
     __android_log_write(ANDROID_LOG_INFO, "QuestHook", "Welcome!");
+    setup_directories();
     modmanager_init();
     load_mods();
 }

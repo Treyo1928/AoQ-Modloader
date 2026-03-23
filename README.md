@@ -119,25 +119,29 @@ apksigner sign --ks your_debug.keystore --ks-pass pass:android AoQ_Patched.apk
 
 ## Step 3 — Sideload the Patched APK
 
-```bash
-adb install -r AoQ_Patched.apk
-```
+The modded APK is signed with a different key than the vanilla game, so Android will reject installing it over the top. You must uninstall the vanilla game first — but you can do this **without losing your save data**.
+
+### In SideQuest
+
+1. Open SideQuest and connect your headset
+2. Click **Currently Installed Apps** (the grid icon in the top bar)
+3. Find **Attack on Quest**, click the settings cog, and choose **Backup Game Data**
+4. Once the backup finishes, uninstall Attack on Quest
+5. Install the modded APK by dragging and dropping `AoQ_Patched.apk` onto the SideQuest window (or use the **Install APK from folder** button)
+6. Go back to **Currently Installed Apps**, find Attack on Quest, and use **Restore Game Data** to restore your save
+
+> If you see `INSTALL_FAILED_UPDATE_INCOMPATIBLE` you skipped the uninstall step — uninstall the vanilla game in SideQuest first, then install the patched APK.
 
 ---
 
 ## Step 4 — Install a Mod
-
-Create the mods folder if it doesn't exist:
-```bash
-adb shell mkdir -p /sdcard/Android/data/com.AoQ.AttackOnQuest/files/mods
-```
 
 Push your mod:
 ```bash
 adb push libmymod.so /sdcard/Android/data/com.AoQ.AttackOnQuest/files/mods/
 ```
 
-Launch the game — any `.so` files in that folder are loaded automatically. Use the **Mods** button in the main menu to manage and configure them in-game.
+The modloader creates all required directories automatically on first launch — no manual setup needed. Launch the game and any `.so` files in the mods folder will be loaded. Use the **Mods** button in the main menu to manage and configure them in-game.
 
 ---
 
