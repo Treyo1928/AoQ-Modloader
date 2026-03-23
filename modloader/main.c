@@ -62,8 +62,12 @@ void load_mods()
     __android_log_write(ANDROID_LOG_INFO, "QuestHook", "Done loading mods!");
 }
 
+/* Forward declaration — implemented in ../modmanager/main.c */
+void modmanager_init(void);
+
 __attribute__((constructor)) void lib_main()
 {
     __android_log_write(ANDROID_LOG_INFO, "QuestHook", "Welcome!");
+    modmanager_init();
     load_mods();
 }
