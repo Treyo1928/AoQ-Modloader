@@ -72,6 +72,11 @@
 /* TMPro.TextMeshProUGUI */
 #define RVA_TMP_SetAllDirty              0x9D46D4
 
+/* TMPro.TMP_Text — auto-sizing */
+#define RVA_TMP_set_enableAutoSizing     0x43BB7C
+#define RVA_TMP_set_fontSizeMin          0x43BBD4
+#define RVA_TMP_set_overflowMode         0x43C09C
+
 /* UnityEngine.Shader */
 #define RVA_Shader_Find                  0xFCE400
 

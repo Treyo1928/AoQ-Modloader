@@ -715,8 +715,15 @@ static void wire_mod_panel(void *panel_go)
         if (cfg_lbl_tr) g_sel_cfg_label = get_tmp_in_go(fn_comp_get_go(cfg_lbl_tr));
 
         void *desc_tr = tr_find(config_tr, "WhiteBackground/ModCfgDescText");
-        if (desc_tr) g_desc_label_comp = get_tmp_in_go(fn_comp_get_go(desc_tr));
-        else LOGI("wire: ModCfgDescText not found");
+        if (desc_tr) {
+            g_desc_label_comp = get_tmp_in_go(fn_comp_get_go(desc_tr));
+            if (g_desc_label_comp) {
+                /* Mirror PCVR: auto-size down to 6pt, truncate on overflow */
+                if (fn_tmp_set_autosize) fn_tmp_set_autosize(g_desc_label_comp, 1);
+                if (fn_tmp_set_fsmin)    fn_tmp_set_fsmin(g_desc_label_comp, 6.0f);
+                if (fn_tmp_set_overflow) fn_tmp_set_overflow(g_desc_label_comp, 3); /* Truncate */
+            }
+        } else LOGI("wire: ModCfgDescText not found");
 
         void *holder_tr = tr_find(config_tr, "ConfigInteractionsHolder");
         if (holder_tr) {
