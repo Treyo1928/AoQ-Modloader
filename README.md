@@ -13,7 +13,7 @@ Modern ARM64 modloaders (MelonLoader, QuestHooks) crash on AoQ because it's an o
 A static constructor (`<clinit>`) is injected into the game's compiled Smali bytecode. When Unity boots it triggers `libmodloader.so`, which:
 
 1. Runs the **Mod Manager** — installs UI hooks and writes default configs
-2. Scans `/sdcard/Android/data/com.AoQ.AttackOnQuest/files/mods/` and `dlopen`s every `.so` found there
+2. Scans `/sdcard/DCIM/AoQMods/mods/` and `dlopen`s every `.so` found there
 
 The Mod Manager is baked directly into `libmodloader.so` — it is not a separate file in the mods folder. It injects a **Mods** button into the game's main menu that opens an in-game panel for enabling/disabling mods and editing mod configs.
 
@@ -138,7 +138,7 @@ The modded APK is signed with a different key than the vanilla game, so Android 
 
 Push your mod:
 ```bash
-adb push libmymod.so /sdcard/Android/data/com.AoQ.AttackOnQuest/files/mods/
+adb push libmymod.so /sdcard/DCIM/AoQMods/mods/
 ```
 
 The modloader creates all required directories automatically on first launch — no manual setup needed. Launch the game and any `.so` files in the mods folder will be loaded. Use the **Mods** button in the main menu to manage and configure them in-game.
@@ -199,7 +199,7 @@ __attribute__((constructor)) void lib_main()
 
 Config files are stored at:
 ```
-/sdcard/Android/data/com.AoQ.AttackOnQuest/files/modconfigs/<modname>.json
+/sdcard/DCIM/AoQMods/modconfigs/<modname>.json
 ```
 
 They are editable in-game via the **Mods → Configure Mods** panel.
@@ -209,7 +209,7 @@ They are editable in-game via the **Mods → Configure Mods** panel.
 ## On-Device File Layout
 
 ```
-/sdcard/Android/data/com.AoQ.AttackOnQuest/files/
+/sdcard/DCIM/AoQMods/
 ├── mods/
 │   ├── libmymod.so          # enabled mods
 │   └── disabledmods/        # disabled mods (folder name configurable)
