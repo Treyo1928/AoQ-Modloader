@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.0
+## v1.2.0
 
 Big reliability pass on the loader and in-game mod manager, plus a new shared
 utility library for mod authors.
