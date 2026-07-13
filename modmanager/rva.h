@@ -27,6 +27,7 @@
 #define RVA_Object_Instantiate_Parent    0xCEBBB0  /* Instantiate(Object,Transform,bool) */
 #define RVA_Object_DontDestroyOnLoad     0xCEC014
 #define RVA_Object_FindObjectsOfType     0xCEBFC4
+#define RVA_Object_Destroy               0xCEBE04  /* static void Destroy(Object) */
 
 /* UnityEngine.Transform */
 #define RVA_Transform_SetParent_bool     0xFD6444

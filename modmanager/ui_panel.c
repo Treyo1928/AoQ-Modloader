@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include "log.h"
 #include "il2cpp.h"
 #include "utils.h"
@@ -29,6 +30,21 @@ void register_button(void *go, BtnHandler handler, int user_index)
     g_btn_registry[g_btn_reg_count].handler    = handler;
     g_btn_registry[g_btn_reg_count].user_index = user_index;
     g_btn_reg_count++;
+}
+
+/* Remove every registry entry for this GO (swap-remove keeps the array dense).
+ * Without this, each list repopulation leaks entries until the registry fills
+ * and freshly spawned buttons silently stop working (the "config menu stops
+ * switching after browsing a while" bug). */
+void unregister_button(void *go)
+{
+    if (!go) return;
+    for (int i = g_btn_reg_count - 1; i >= 0; i--) {
+        if (g_btn_registry[i].go == go) {
+            g_btn_registry[i] = g_btn_registry[g_btn_reg_count - 1];
+            g_btn_reg_count--;
+        }
+    }
 }
 
 /* ======================================================================
@@ -75,12 +91,12 @@ void *g_manage_template_go  = NULL;
 void *g_cfg_mod_template_go = NULL;
 void *g_cfg_ent_template_go = NULL;
 
-void *g_manage_btns[MAX_LIST_BUTTONS];
-int   g_manage_btn_count = 0;
-void *g_cfg_mod_btns[MAX_LIST_BUTTONS];
-int   g_cfg_mod_btn_count = 0;
-void *g_cfg_ent_btns[MAX_LIST_BUTTONS];
-int   g_cfg_ent_btn_count = 0;
+ListBtn g_manage_btns[MAX_LIST_BUTTONS];
+int     g_manage_btn_count = 0;
+ListBtn g_cfg_mod_btns[MAX_LIST_BUTTONS];
+int     g_cfg_mod_btn_count = 0;
+ListBtn g_cfg_ent_btns[MAX_LIST_BUTTONS];
+int     g_cfg_ent_btn_count = 0;
 
 ModEntry  g_mod_entries[MAX_MODS];
 int       g_mod_count       = 0;
@@ -101,10 +117,10 @@ static void hide_all_widgets(void);
 static void refresh_bool_widget(void);
 static void refresh_number_widget(void);
 static void refresh_str_widget(void);
-static void clear_list(void **btns, int *count);
-static void *spawn_list_btn(void *content_tr, void *template_go,
-                            const char *label, BtnHandler handler,
-                            int idx, float anchor_y);
+static void clear_list(ListBtn *btns, int *count);
+static void spawn_list_btn(ListBtn *out, void *content_tr, void *template_go,
+                           const char *label, BtnHandler handler,
+                           int idx, float anchor_y);
 
 /* ======================================================================
  * INTERACTION WIDGET HELPERS
@@ -517,20 +533,29 @@ static int self_cfg_bool(const char *key, int def)
     return e ? (int)e->value_num : def;
 }
 
-static void clear_list(void **btns, int *count)
+static void clear_list(ListBtn *btns, int *count)
 {
-    for (int i = 0; i < *count; i++)
-        if (btns[i]) fn_go_set_active(btns[i], 0);
+    for (int i = 0; i < *count; i++) {
+        if (btns[i].reg_go)  unregister_button(btns[i].reg_go);
+        if (btns[i].root_go) {
+            /* Destroy instead of just deactivating — deactivated rows were
+             * leaking GameObjects (and registry slots) on every repopulation */
+            if (fn_obj_destroy) fn_obj_destroy(btns[i].root_go);
+            else                fn_go_set_active(btns[i].root_go, 0);
+        }
+        btns[i].root_go = btns[i].reg_go = NULL;
+    }
     *count = 0;
 }
 
-static void *spawn_list_btn(void *content_tr, void *template_go,
-                            const char *label, BtnHandler handler, int idx,
-                            float anchor_y)
+static void spawn_list_btn(ListBtn *out, void *content_tr, void *template_go,
+                           const char *label, BtnHandler handler, int idx,
+                           float anchor_y)
 {
-    if (!content_tr || !template_go) return NULL;
+    out->root_go = out->reg_go = NULL;
+    if (!content_tr || !template_go) return;
     void *new_go = fn_obj_instantiate(template_go);
-    if (!new_go) return NULL;
+    if (!new_go) return;
     void *tr = fn_go_get_tr(new_go);
     fn_tr_set_parent(tr, content_tr, 0);
     fn_rect_set_apos(tr, 0.0f, anchor_y);
@@ -542,13 +567,13 @@ static void *spawn_list_btn(void *content_tr, void *template_go,
     if (!btn_comp && fn_get_comp_ch)
         btn_comp = fn_get_comp_ch(tr, g_button_type_obj, 1);
     void *btn_go = btn_comp ? fn_comp_get_go(btn_comp) : new_go;
-    if (btn_go != new_go)
-        LOGI("spawn_list_btn: Button on child GO (root=%p btn_go=%p) label='%s'",
-             new_go, btn_go, label);
     /* Interactable only when there's a handler — Unity greys out non-interactable buttons */
     if (btn_comp && fn_set_interactable) fn_set_interactable(btn_comp, handler ? 1 : 0);
-    if (handler) register_button(btn_go, handler, idx);
-    return new_go;  /* return root GO for show/hide tracking */
+    if (handler) {
+        register_button(btn_go, handler, idx);
+        out->reg_go = btn_go;
+    }
+    out->root_go = new_go;
 }
 
 static void populate_manage_list(void)
@@ -569,22 +594,24 @@ static void populate_manage_list(void)
 
         /* Self: show greyed-out, non-interactable. Others: color by enabled state. */
         BtnHandler h = is_self ? NULL : on_manage_toggle;
-        void *btn = spawn_list_btn(g_manage_content_tr, g_manage_template_go,
-                                   label, h, i, y);
-        if (btn) {
+        ListBtn *slot = &g_manage_btns[g_manage_btn_count];
+        spawn_list_btn(slot, g_manage_content_tr, g_manage_template_go,
+                       label, h, i, y);
+        if (slot->root_go) {
             if (is_self)
-                add_state_overlay(btn, 0.3f, 0.3f, 0.3f, 0.6f);
+                add_state_overlay(slot->root_go, 0.3f, 0.3f, 0.3f, 0.6f);
             else if (g_mod_entries[i].enabled)
-                add_state_overlay(btn, 0.0f, 0.6f, 0.0f, 0.5f);
+                add_state_overlay(slot->root_go, 0.0f, 0.6f, 0.0f, 0.5f);
             else
-                add_state_overlay(btn, 0.6f, 0.0f, 0.0f, 0.5f);
+                add_state_overlay(slot->root_go, 0.6f, 0.0f, 0.0f, 0.5f);
         }
-        g_manage_btns[g_manage_btn_count++] = btn;
+        g_manage_btn_count++;
         y -= 50.0f;
         shown++;
     }
-    if (shown == 0)
-        spawn_list_btn(g_manage_content_tr, g_manage_template_go,
+    if (shown == 0 && g_manage_btn_count < MAX_LIST_BUTTONS)
+        spawn_list_btn(&g_manage_btns[g_manage_btn_count++],
+                       g_manage_content_tr, g_manage_template_go,
                        "No other mods found", NULL, -1, 0.0f);
 }
 
@@ -602,22 +629,30 @@ static void populate_cfg_mod_list(void)
     float y = 0.0f;
     int shown = 0;
     for (int i = 0; i < g_mod_count && g_cfg_mod_btn_count < MAX_LIST_BUTTONS; i++) {
-        int has_cfg = config_exists(g_mod_entries[i].name);
-        if (!has_cfg && !show_all) continue;  /* hide no-config mods unless ShowAllMods */
+        int has_cfg  = config_exists(g_mod_entries[i].name);
+        int disabled = !g_mod_entries[i].builtin && !g_mod_entries[i].enabled;
+        /* Disabled mods have no business in the Configure list — their config
+         * files still exist on disk, so filter on state, not just has_cfg */
+        if ((!has_cfg || disabled) && !show_all) continue;
 
         const char *label = g_mod_entries[i].display_name[0] ? g_mod_entries[i].display_name : g_mod_entries[i].name;
-        BtnHandler h = has_cfg ? on_cfg_mod_select : NULL;
-        void *btn = spawn_list_btn(g_cfg_mod_content_tr, g_cfg_mod_template_go,
-                                   label, h, i, y);
-        /* Dark overlay for mods with no config (only shown when ShowAllMods = true) */
-        if (btn && !has_cfg)
-            add_state_overlay(btn, 0.0f, 0.0f, 0.0f, 0.5f);
-        g_cfg_mod_btns[g_cfg_mod_btn_count++] = btn;
+        BtnHandler h = (has_cfg && !disabled) ? on_cfg_mod_select : NULL;
+        ListBtn *slot = &g_cfg_mod_btns[g_cfg_mod_btn_count];
+        spawn_list_btn(slot, g_cfg_mod_content_tr, g_cfg_mod_template_go,
+                       label, h, i, y);
+        if (slot->root_go) {
+            if (disabled)       /* red tint: present but disabled (ShowAllMods only) */
+                add_state_overlay(slot->root_go, 0.6f, 0.0f, 0.0f, 0.5f);
+            else if (!has_cfg)  /* dark tint: no config (ShowAllMods only) */
+                add_state_overlay(slot->root_go, 0.0f, 0.0f, 0.0f, 0.5f);
+        }
+        g_cfg_mod_btn_count++;
         y -= 50.0f;
         shown++;
     }
-    if (shown == 0)
-        spawn_list_btn(g_cfg_mod_content_tr, g_cfg_mod_template_go,
+    if (shown == 0 && g_cfg_mod_btn_count < MAX_LIST_BUTTONS)
+        spawn_list_btn(&g_cfg_mod_btns[g_cfg_mod_btn_count++],
+                       g_cfg_mod_content_tr, g_cfg_mod_template_go,
                        "No mods found", NULL, -1, 0.0f);
 }
 
@@ -631,9 +666,9 @@ void populate_cfg_entry_list(void)
         ModCfgEntry *e = &g_active_config.entries[i];
         char label[192];
         snprintf(label, sizeof(label), "%s", e->key);
-        void *btn = spawn_list_btn(g_cfg_ent_content_tr, g_cfg_ent_template_go,
-                                   label, on_cfg_entry_select, i, y);
-        g_cfg_ent_btns[g_cfg_ent_btn_count++] = btn;
+        spawn_list_btn(&g_cfg_ent_btns[g_cfg_ent_btn_count++],
+                       g_cfg_ent_content_tr, g_cfg_ent_template_go,
+                       label, on_cfg_entry_select, i, y);
         y -= 50.0f;
     }
 }
@@ -844,6 +879,15 @@ void update_bundle_state(void)
 
     case BS_IDLE:
         if (!fn_bundle_load_async || !fn_str_new) return;
+        {
+            /* Constructor-time extraction can fail on a fresh install (the
+             * app data dir may not exist yet) — re-extract now if missing. */
+            struct stat st;
+            if (stat(BUNDLE_PATH, &st) != 0 || st.st_size <= 0) {
+                LOGI("bundle: %s missing — re-extracting", BUNDLE_PATH);
+                extract_bundle_to_disk();
+            }
+        }
         LOGI("bundle: starting LoadFromFileAsync(%s)", BUNDLE_PATH);
         g_bundle_load_req = fn_bundle_load_async(make_str(BUNDLE_PATH));
         if (!g_bundle_load_req) {

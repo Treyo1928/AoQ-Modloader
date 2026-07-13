@@ -15,6 +15,7 @@ extern BtnEntry g_btn_registry[MAX_REG_BUTTONS];
 extern int      g_btn_reg_count;
 
 void register_button(void *go, BtnHandler handler, int user_index);
+void unregister_button(void *go);
 
 /* ======================================================================
  * ASSET BUNDLE STATE
@@ -75,12 +76,17 @@ extern void *g_cfg_mod_template_go;
 extern void *g_cfg_ent_template_go;
 
 #define MAX_LIST_BUTTONS 48
-extern void *g_manage_btns[MAX_LIST_BUTTONS];
-extern int   g_manage_btn_count;
-extern void *g_cfg_mod_btns[MAX_LIST_BUTTONS];
-extern int   g_cfg_mod_btn_count;
-extern void *g_cfg_ent_btns[MAX_LIST_BUTTONS];
-extern int   g_cfg_ent_btn_count;
+
+/* A spawned list row: root GO (for show/hide/destroy) plus the GO that was
+ * actually registered in the button registry (may be a child of root). */
+typedef struct { void *root_go; void *reg_go; } ListBtn;
+
+extern ListBtn g_manage_btns[MAX_LIST_BUTTONS];
+extern int     g_manage_btn_count;
+extern ListBtn g_cfg_mod_btns[MAX_LIST_BUTTONS];
+extern int     g_cfg_mod_btn_count;
+extern ListBtn g_cfg_ent_btns[MAX_LIST_BUTTONS];
+extern int     g_cfg_ent_btn_count;
 
 extern ModEntry  g_mod_entries[MAX_MODS];
 extern int       g_mod_count;
@@ -105,3 +111,6 @@ void reset_ui_state(void);          /* called on scene restart to allow re-injec
 /* ui_inject.c */
 void inject_ui_from_canvas(void *canvas_tr);
 void try_inject_ui(void);
+
+/* main.c */
+void extract_bundle_to_disk(void);

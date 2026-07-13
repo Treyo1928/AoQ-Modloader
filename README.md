@@ -62,12 +62,12 @@ Then skip to [Step 4](#step-4--install-a-mod).
 
 ## Step 1 — Build the Modloader
 
-**Prerequisites:** Android NDK r26d
+**Prerequisites:** any recent Android NDK (r26+)
 
 ```bash
 git clone https://github.com/Treyo1928/AoQ-Modloader.git
-cd AoQ-ModLoader-For-Quest/modloader
-/path/to/ndk/ndk-build NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=./Android.mk APP_ABI=armeabi-v7a
+cd AoQ-Modloader/modloader
+ndk-build NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=./Android.mk NDK_APPLICATION_MK=./Application.mk APP_ABI=armeabi-v7a APP_PLATFORM=android-21
 ```
 
 Output: `libs/armeabi-v7a/libmodloader.so`
@@ -108,6 +108,24 @@ Open `AoQ_Extracted/smali/com/unity3d/player/UnityPlayerActivity.smali` and past
 .end method
 ```
 
+**3b. Lower `targetSdkVersion` to 29 (REQUIRED)**
+
+AoQ 0.5.0 ships with `targetSdkVersion="30"`. At target 30, Android 11+ enforces
+**scoped storage** and ignores the `requestLegacyExternalStorage` flag — the game
+then can't read mods or write configs under `/sdcard/DCIM/AoQMods/` even after the
+user approves the storage permission (you'll see `Operation not permitted` in
+logcat and the mod list will show only the mod manager itself). Setting
+`targetSdkVersion="29"` re-enables legacy external storage, so the single runtime
+storage prompt is all a user needs — no adb grants, no "All files access" toggle.
+
+`apktool d -r` keeps the manifest as binary AXML. Either re-decode **without** `-r`
+so `AndroidManifest.xml` is editable text (change `targetSdkVersion` to `29`), or
+binary-patch the `targetSdkVersion` attribute (Android resource id `0x01010270`,
+`INT_DEC` value) from `30` to `29` in place. Verify afterwards:
+```bash
+aapt dump badging AoQ_Patched.apk | grep targetSdkVersion   # -> '29'
+```
+
 **4. Repack and sign**
 ```bash
 apktool b AoQ_Extracted -o AoQ_Modded.apk
@@ -129,8 +147,11 @@ The modded APK is signed with a different key than the vanilla game, so Android 
 4. Once the backup finishes, uninstall Attack on Quest
 5. Install the modded APK by dragging and dropping `AoQ_Patched.apk` onto the SideQuest window (or use the **Install APK from folder** button)
 6. Go back to **Currently Installed Apps**, find Attack on Quest, and use **Restore Game Data** to restore your save
+7. **Launch the game once and approve the storage permission prompt.** This one grant (thanks to the target-SDK-29 patch above) is all that's needed for the game to read your mods — no adb, no extra settings.
 
 > If you see `INSTALL_FAILED_UPDATE_INCOMPATIBLE` you skipped the uninstall step — uninstall the vanilla game in SideQuest first, then install the patched APK.
+
+> If the Mods menu opens but lists only the mod manager, the game doesn't have storage access: re-approve the prompt, or in the headset go **Settings → Apps → Attack on Quest → Permissions → Storage → Allow**. If you built your own APK and skipped step 3b, that's the cause.
 
 ---
 

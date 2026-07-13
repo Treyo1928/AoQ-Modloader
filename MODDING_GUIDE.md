@@ -19,6 +19,7 @@
 12. [Building and Deploying](#12-building-and-deploying)
 13. [Case Study: Porting LeviGrip to Quest](#13-case-study-porting-levygrip-to-quest)
 14. [Concept Cheat Sheet](#14-concept-cheat-sheet)
+15. [The aoqcore Utility Library](#15-the-aoqcore-utility-library)
 
 ---
 
@@ -27,7 +28,7 @@
 `libmodloader.so` is baked into the game APK and loaded by a Smali `<clinit>` hook on startup. It:
 
 1. Initialises the **Mod Manager** (installs UI hooks, writes default configs)
-2. Scans `/sdcard/Android/data/com.AoQ.AttackOnQuest/files/mods/` alphabetically and `dlopen`s every `.so` found there
+2. Scans `/sdcard/DCIM/AoQMods/mods/` alphabetically and `dlopen`s every `.so` found there
 
 Your entry point is a constructor function that runs automatically when your `.so` is loaded:
 
@@ -111,7 +112,7 @@ aoqmm_ensure_config("libmymod.so",
 
 The config file is written to:
 ```
-/sdcard/Android/data/com.AoQ.AttackOnQuest/files/modconfigs/mymod.json
+/sdcard/DCIM/AoQMods/modconfigs/mymod.json
 ```
 (`lib` prefix and `.so` suffix are stripped automatically.)
 
@@ -121,29 +122,24 @@ Users can edit all values in-game via **Mods → Configure Mods → [Your Mod]**
 
 ## 4. Reading Config at Runtime
 
-Include `modconfig.h` to read your config values in C. Always read on demand — don't cache at startup, since the user may have changed values in-game.
+Use the config cache from the shared **aoqcore** library (see [section 15](#15-the-aoqcore-utility-library)). `load_config()` does disk I/O and JSON parsing, so never call it per frame — keep an `AoqCfgCache` and refresh it at natural boundaries (a `Start` hook firing, a button press) so in-game edits still get picked up.
 
 ```c
-#include "../../AoQ-ModLoader-For-Quest/modmanager/modconfig.h"
+#include "../../AoQ-ModLoader-For-Quest/shared/aoqcore/aoq.h"
 
-static int get_cfg_enabled(void)
-{
-    ModConfig cfg;
-    if (load_config("libmymod.so", &cfg) != 0) return 1; /* default if missing */
-    ModCfgEntry *e = get_entry(&cfg, "Enabled");
-    return e ? (int)e->value_num : 1;
-}
+static AoqCfgCache g_cfg = {0};
+static int   cfg_enabled  = 1;
+static float cfg_strength = 1.0f;
 
-static float get_cfg_strength(void)
+static void refresh_config(void)
 {
-    ModConfig cfg;
-    if (load_config("libmymod.so", &cfg) != 0) return 1.0f;
-    ModCfgEntry *e = get_entry(&cfg, "Strength");
-    return e ? (float)e->value_num : 1.0f;
+    if (aoq_cfg_refresh(&g_cfg, "libmymod.so") != 0) return; /* keeps old values */
+    cfg_enabled  = aoq_cfg_bool(&g_cfg, "Enabled",  1);
+    cfg_strength = aoq_cfg_flt (&g_cfg, "Strength", 1.0f);
 }
 ```
 
-For string values use `e->value_str`. For booleans, `value_num` is `1.0` (true) or `0.0` (false).
+For string values, use `get_entry(&g_cfg.cfg, "Key")->value_str` (raw `modconfig.h` API — still available underneath).
 
 ---
 
@@ -393,22 +389,17 @@ include $(CLEAR_VARS)
 LOCAL_MODULE     := mymod                # output: libmymod.so
 LOCAL_LDLIBS     := -llog
 LOCAL_SRC_FILES  := src/main.c \
+    ../../AoQ-ModLoader-For-Quest/shared/aoqcore/aoq.c \
     ../../AoQ-ModLoader-For-Quest/shared/inline-hook/inlineHook.c \
     ../../AoQ-ModLoader-For-Quest/shared/inline-hook/relocate.c \
-    ../../AoQ-ModLoader-For-Quest/shared/utils/utils.c
+    ../../AoQ-ModLoader-For-Quest/shared/utils/utils.c \
+    ../../AoQ-ModLoader-For-Quest/modmanager/modconfig.c \
+    ../../AoQ-ModLoader-For-Quest/modmanager/cJSON.c
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../AoQ-ModLoader-For-Quest/modmanager
 include $(BUILD_SHARED_LIBRARY)
 ```
 
-If you use `modconfig.h` to read configs, also add:
-```makefile
-    ../../AoQ-ModLoader-For-Quest/modmanager/modconfig.c \
-    ../../AoQ-ModLoader-For-Quest/modmanager/cJSON.c
-```
-
-And add the include path:
-```makefile
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../AoQ-ModLoader-For-Quest/modmanager
-```
+(`aoq.c`, `modconfig.c` and `cJSON.c` are only needed if you use aoqcore / configs — but every mod in this ecosystem does, so start from this template.)
 
 ### Application.mk
 
@@ -426,8 +417,7 @@ APP_CFLAGS   := -std=gnu17
 /path/to/ndk/ndk-build NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=./Android.mk APP_ABI=armeabi-v7a
 
 # Push to device:
-adb push libs/armeabi-v7a/libmymod.so \
-    /sdcard/Android/data/com.AoQ.AttackOnQuest/files/mods/
+adb push libs/armeabi-v7a/libmymod.so /sdcard/DCIM/AoQMods/mods/
 
 # Watch logs:
 adb logcat -s MyModTag,AoQModManager,QuestHook
@@ -438,6 +428,14 @@ Restart the game after pushing. In-game, open **Mods → Configure Mods** to see
 ---
 
 ## 13. Case Study: Porting LeviGrip to Quest
+
+> **Note:** this walkthrough shows the original v1 port and predates the shared
+> `aoqcore` library. It's still a good tour of the porting process, but it is
+> missing two things that later turned out to be mandatory in real mods — a
+> `photonView.IsMine` gate on any `Network*` hook (they fire for EVERY player's
+> clone), and `aoq_alive()` checks before touching cached Unity objects. Read the
+> current [TreysLeviGrip source](https://github.com/Treyo1928/TreysLeviGrip-Quest-AoQ-Mod)
+> (v2.0.0) for the corrected patterns, and see [section 15](#15-the-aoqcore-utility-library).
 
 ### What the mod does
 
@@ -633,4 +631,70 @@ __attribute__((constructor)) void lib_main()
 | `Logger.LogInfo("msg")` | `__android_log_print(ANDROID_LOG_INFO, TAG, "msg")` |
 | Register mod name/version | `aoqmm_register("libmod.so", "Name", "1.0", "Author", "Desc")` |
 | Write default config | `aoqmm_ensure_config("libmod.so", json_string)` |
-| Read config value | `load_config("libmod.so", &cfg)` → `get_entry(&cfg, "Key")` |
+| Read config value | `aoq_cfg_flt(&cache, "Key", default)` (see §4/§15) |
+| `photonView.IsMine` | `aoq_is_mine(self)` |
+| `obj == null` (destroyed check) | `!aoq_alive(obj)` |
+| `Object.Destroy(obj)` | `aoq_destroy(obj)` |
+| `GetComponent<T>()` | `aoq_go_get_component_named(go, "", "T")` |
+
+---
+
+## 15. The aoqcore Utility Library
+
+`shared/aoqcore/aoq.{c,h}` wraps the Unity engine, TextMeshPro, Photon and
+config plumbing every mod ends up needing. Add `aoq.c` to your `Android.mk`
+(see section 12), call `aoq_init()` once in `lib_main()`, and everything else
+resolves itself lazily the first time a hook calls it. All helpers are
+null-safe. The full API is documented in `aoq.h`; the highlights:
+
+### The two rules that prevent almost every crash
+
+**Rule 1 — gate `Network*` hooks on IsMine.** Any hook on a `Network*`
+component (`NetworkBlades`, `NetworkWeaponSwap`, ...) fires once per frame for
+**every player's clone**, not just yours. The vanilla `Update` bodies
+early-return on `!photonView.IsMine`, but your hook body still runs — on other
+players' objects, and on half-destroyed objects during room teardown after a
+kick. Both shipped mods that skipped this check had multiplayer bugs (wrong
+player's blades getting health text; a crash when kicked from a room).
+
+```c
+MAKE_HOOK(NetworkThing_Update, 0xRVA, void, void *self)
+{
+    NetworkThing_Update(self);
+    if (!aoq_is_mine(self)) return;   /* ← always */
+    /* ... your code ... */
+}
+```
+
+**Rule 2 — never touch a cached Unity object without `aoq_alive()`.** Unity
+destroys objects on death, blade break, scene change, kick. A cached pointer
+still *points* somewhere, but calling an engine method on it crashes or throws.
+`aoq_alive()` checks the native handle (`m_CachedPtr`); the pattern that
+replaces Start-hook caching entirely is *lazy creation in Update*:
+
+```c
+if (!aoq_alive(g_my_text)) {
+    g_my_text = aoq_tmp_create("MyText", parent_tr, 5.0f, 0, 0.3f, 0);
+}
+```
+
+### API summary
+
+| Area | Functions |
+|---|---|
+| Lifetime | `aoq_alive(obj)`, `aoq_destroy(obj)`, `aoq_go_set_active(go, v)` |
+| Photon | `aoq_is_mine(self)`, `aoq_photon_view(self)`, `aoq_is_master()` |
+| Reflection | `aoq_find_class(ns, name)`, `aoq_type_object(klass)`, `aoq_go_get_component(go, type)`, `aoq_go_get_component_named(go, ns, name)`, `aoq_static_fields(typeinfo_rva)` |
+| Config | `AoqCfgCache`, `aoq_cfg_refresh`, `aoq_cfg_flt/int/bool/num` (section 4) |
+| Input | `aoq_tap_hold(&state, down, held, now, hold_secs)` → `AOQ_INPUT_TAP` / `AOQ_INPUT_HOLD` |
+| Transforms | `aoq_get_transform(comp)`, `aoq_get_transform_go(go)`, `aoq_set_parent`, `aoq_set_local_position`, `aoq_set_local_scale`, `aoq_billboard(tr, target_tr)` |
+| Text | `aoq_tmp_create(name, parent_tr, size, x, y, z)`, `aoq_tmp_set_text`, `aoq_tmp_set_color`, `aoq_tmp_set_alignment`, `aoq_tmp_set_font_size` |
+| Fields | `AOQ_FIELD(obj, offset, type)` — typed field access by dump.cs offset |
+| Camera | `aoq_camera_main()` |
+
+### Where RVAs live
+
+Engine/Photon/TMP RVAs are centralised in one table at the top of `aoq.c`,
+tagged with the game version. Game-class RVAs (your hook targets and field
+offsets) stay in your mod. When AoQ updates: re-run Il2CppDumper, fix the
+table in `aoq.c` once, then fix each mod's own hook RVAs.

@@ -20,7 +20,7 @@ extern "C" {
  *   ]
  * }
  */
-#define MODCONFIGS_DIR "/sdcard/Android/data/com.AoQ.AttackOnQuest/files/modconfigs/"
+#define MODCONFIGS_DIR "/sdcard/DCIM/AoQMods/modconfigs/"
 
 #define MODCFG_TYPE_FLOAT  "float"
 #define MODCFG_TYPE_INT    "int"

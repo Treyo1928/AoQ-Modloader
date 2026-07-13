@@ -21,6 +21,7 @@ pfn_obj_set_name     fn_obj_set_name     = NULL;
 pfn_obj_instantiate  fn_obj_instantiate  = NULL;
 pfn_obj_inst_parent  fn_obj_inst_parent  = NULL;
 pfn_obj_dontdestroy  fn_obj_dontdestroy  = NULL;
+pfn_obj_destroy      fn_obj_destroy      = NULL;
 pfn_obj_find_type    fn_obj_find_type    = NULL;
 pfn_tr_set_parent    fn_tr_set_parent    = NULL;
 pfn_tr_set_lpos      fn_tr_set_lpos      = NULL;
@@ -167,6 +168,7 @@ void late_init(void)
     fn_obj_instantiate=(pfn_obj_instantiate) getRealOffset(RVA_Object_Instantiate);
     fn_obj_inst_parent=(pfn_obj_inst_parent) getRealOffset(RVA_Object_Instantiate_Parent);
     fn_obj_dontdestroy=(pfn_obj_dontdestroy) getRealOffset(RVA_Object_DontDestroyOnLoad);
+    fn_obj_destroy  = (pfn_obj_destroy)      getRealOffset(RVA_Object_Destroy);
     fn_obj_find_type= (pfn_obj_find_type)    getRealOffset(RVA_Object_FindObjectsOfType);
     fn_tr_set_parent= (pfn_tr_set_parent)    getRealOffset(RVA_Transform_SetParent_bool);
     fn_tr_set_lpos  = (pfn_tr_set_lpos)      getRealOffset(RVA_Transform_set_localPosition);

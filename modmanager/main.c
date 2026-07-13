@@ -20,6 +20,7 @@
 #include "utils.h"
 #include "ui.h"
 #include "bundle_data.h"
+#include "../shared/modapi/modapi.h"
 #include "../shared/inline-hook/inlineHook.h"
 #include "../shared/utils/utils.h"
 
@@ -27,8 +28,14 @@
  * BUNDLE EXTRACTION — write embedded bundle bytes to app data dir
  * ====================================================================== */
 
-static void extract_bundle_to_disk(void)
+void extract_bundle_to_disk(void)
 {
+    /* On a FRESH install /data/data/<pkg>/files does not exist yet — Android
+     * only creates it lazily when the app asks for it, which is after this
+     * constructor-time code runs. Create it ourselves or fopen fails and the
+     * Mods panel never becomes ready (Mods button silently does nothing). */
+    mkdir(BUNDLE_DIR, 0771);
+
     FILE *f = fopen(BUNDLE_PATH, "wb");
     if (!f) {
         LOGE("extract_bundle: fopen(%s) failed: %s", BUNDLE_PATH, strerror(errno));
@@ -46,8 +53,7 @@ static void extract_bundle_to_disk(void)
  * DEFAULT CONFIG EXTRACTION — write embedded JSON if not already present
  * ====================================================================== */
 
-#define AOQMGR_CFG_PATH \
-    "/sdcard/Android/data/com.AoQ.AttackOnQuest/files/modconfigs/aoqmodmanager.json"
+#define AOQMGR_CFG_PATH  MODCONFIGS_DIR "aoqmodmanager.json"
 
 static const char s_default_config[] =
     "{\n"
@@ -79,6 +85,10 @@ static const char s_default_config[] =
     "  ]\n"
     "}\n";
 
+/* Deferred mod loading — implemented in ../modloader/main.c.
+ * Returns 1 once mods are loaded (storage reachable), 0 to retry next frame. */
+int load_mods(void);
+
 static void extract_default_config(void)
 {
     /* Only write if the file doesn't already exist — preserve user edits */
@@ -89,7 +99,7 @@ static void extract_default_config(void)
     }
 
     /* Ensure the modconfigs directory exists */
-    mkdir("/sdcard/Android/data/com.AoQ.AttackOnQuest/files/modconfigs", 0755);
+    mkdir(MODCONFIGS_DIR, 0755);
 
     FILE *f = fopen(AOQMGR_CFG_PATH, "w");
     if (!f) {
@@ -137,22 +147,48 @@ MAKE_HOOK(OVRCameraRig_UpdateAnchors, RVA_OVRCameraRig_UpdateAnchors,
     static int s_frame = 0;
     s_frame++;
 
+    /* Load mods as soon as external storage is reachable. On a fresh install
+     * that only happens a few seconds in, once the user approves the storage
+     * permission prompt — so we retry every frame until it succeeds, then load
+     * exactly once. This runs on the main menu, before any gameplay Start fires,
+     * so mods still install their hooks in time. */
+    static int s_mods_loaded = 0;
+    if (!s_mods_loaded && load_mods()) {
+        s_mods_loaded = 1;
+        extract_default_config();  /* our own /sdcard config write needs storage too */
+        /* Register our own display metadata so the mod manager lists itself as
+         * "Mod Manager" instead of the raw "libaoqmodmanager.so" filename. Also
+         * needs storage, so it rides the same deferred trigger. */
+        aoqmm_register(SELF_MOD_NAME, "Mod Manager", "1.0.0", "Treyo1928",
+                       "Manage and configure your installed mods in-game.");
+    }
+
     if (s_frame == 1) {
         LOGI("HOOK OVRCameraRig.UpdateAnchors: first fire!");
         late_init();
-        /* Save OVRCameraRig transform once — it's always active and lets us
-         * navigate to MainMenuCanvas even when the menu hierarchy is inactive. */
-        g_ovr_rig_tr = fn_comp_get_tr(self);
-        LOGI("UpdateAnchors: g_ovr_rig_tr=%p", g_ovr_rig_tr);
     }
 
+    /* Keep a LIVE handle to the current OVRCameraRig transform. self is the
+     * active rig every frame, and it's destroyed + recreated on scene reload
+     * (e.g. UnderFloorLoad restarts the level via LoadScene). Capturing it only
+     * once left a stale pointer after a restart, so the fallback that finds the
+     * (inactive) wrist menu failed and the Mods button never re-injected. */
+    if (fn_comp_get_tr) g_ovr_rig_tr = fn_comp_get_tr(self);
+
     /* Detect scene change: if our Mods button has been destroyed Unity has
-     * zeroed its m_cachedPtr (offset 0x8).  Reset so re-injection can happen. */
-    if (g_inject_done && g_mods_button_go && (s_frame % 120 == 0)) {
-        if (!unity_alive(g_mods_button_go)) {
-            LOGI("UpdateAnchors frame %d: Mods button destroyed — scene changed, resetting", s_frame);
-            reset_ui_state();
-        }
+     * zeroed its m_cachedPtr (offset 0x8).  Reset so re-injection can happen.
+     *
+     * Checked EVERY frame, not every 120. The button's C# wrapper is
+     * collectable the moment Unity destroys it, and a scene reload allocates
+     * enough objects to reuse that freed slot within a frame or two — if we
+     * only sampled every ~2 s, the reused memory read non-zero (m_cachedPtr of
+     * some new live object), the check falsely saw the button as "alive", and
+     * re-injection never fired until the next scene change. Sampling every
+     * frame shrinks that use-after-free window to ~1 frame (GC won't reclaim +
+     * reuse the wrapper between Destroy and the very next UpdateAnchors). */
+    if (g_inject_done && g_mods_button_go && !unity_alive(g_mods_button_go)) {
+        LOGI("UpdateAnchors frame %d: Mods button destroyed — scene changed, resetting", s_frame);
+        reset_ui_state();
     }
 
     /* Poll every 10 frames until injection succeeds (~0.14 s max latency) */
@@ -213,7 +249,9 @@ void modmanager_init(void)
 {
     LOGI("aoqmodmanager: loading...");
     extract_bundle_to_disk();
-    extract_default_config();
+    /* extract_default_config() is NOT called here — /sdcard isn't writable this
+     * early on a fresh install. It runs from the UpdateAnchors hook once the
+     * storage permission is active (same trigger as deferred mod loading). */
 
     long addr_ss = getRealOffset(RVA_StartMenu_Start);
     long addr_ua = getRealOffset(RVA_OVRCameraRig_UpdateAnchors);
